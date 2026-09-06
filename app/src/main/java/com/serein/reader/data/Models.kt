@@ -77,7 +77,6 @@ data class ReaderPreferences(
     val justifyText: Boolean = false,
     val bionicReading: Boolean = false,
     val readingMode: ReadingMode = ReadingMode.PAGED,
-    val animatedPageTurns: Boolean = true,
     /** -1 follows the system brightness; values from 0.05 to 1 override it. */
     val brightness: Float = -1f,
     val orientation: ReaderOrientation = ReaderOrientation.SYSTEM,

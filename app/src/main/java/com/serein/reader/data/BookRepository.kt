@@ -253,7 +253,6 @@ class BookRepository(private val context: Context) {
                 preferences.getString(KEY_READING_MODE, ReadingMode.PAGED.name).orEmpty()
             )
         }.getOrDefault(ReadingMode.PAGED),
-        animatedPageTurns = preferences.getBoolean(KEY_ANIMATED_PAGE_TURNS, true),
         brightness = preferences.getFloat(KEY_BRIGHTNESS, -1f).let {
             if (it < 0f) -1f else it.coerceIn(0.05f, 1f)
         },
@@ -273,7 +272,6 @@ class BookRepository(private val context: Context) {
             .putBoolean(KEY_JUSTIFY_TEXT, readerPreferences.justifyText)
             .putBoolean(KEY_BIONIC, readerPreferences.bionicReading)
             .putString(KEY_READING_MODE, readerPreferences.readingMode.name)
-            .putBoolean(KEY_ANIMATED_PAGE_TURNS, readerPreferences.animatedPageTurns)
             .putFloat(KEY_BRIGHTNESS, readerPreferences.brightness)
             .putString(KEY_ORIENTATION, readerPreferences.orientation.name)
             .putBoolean(KEY_VOLUME_PAGE_TURNS, readerPreferences.volumePageTurns)
@@ -692,7 +690,6 @@ class BookRepository(private val context: Context) {
         .put("justifyText", value.justifyText)
         .put("bionicReading", value.bionicReading)
         .put("readingMode", value.readingMode.name)
-        .put("animatedPageTurns", value.animatedPageTurns)
         .put("brightness", value.brightness.toDouble())
         .put("orientation", value.orientation.name)
         .put("volumePageTurns", value.volumePageTurns)
@@ -708,7 +705,6 @@ class BookRepository(private val context: Context) {
         justifyText = optBoolean("justifyText"),
         bionicReading = optBoolean("bionicReading"),
         readingMode = runCatching { ReadingMode.valueOf(optString("readingMode")) }.getOrDefault(ReadingMode.PAGED),
-        animatedPageTurns = optBoolean("animatedPageTurns", true),
         brightness = optDouble("brightness", -1.0).toFloat().let { if (it < 0f) -1f else it.coerceIn(0.05f, 1f) },
         orientation = runCatching { ReaderOrientation.valueOf(optString("orientation")) }.getOrDefault(ReaderOrientation.SYSTEM),
         volumePageTurns = optBoolean("volumePageTurns"),
@@ -793,7 +789,6 @@ class BookRepository(private val context: Context) {
         const val KEY_JUSTIFY_TEXT = "reader_justify_text"
         const val KEY_BIONIC = "reader_bionic"
         const val KEY_READING_MODE = "reader_reading_mode"
-        const val KEY_ANIMATED_PAGE_TURNS = "reader_animated_page_turns"
         const val KEY_BRIGHTNESS = "reader_brightness"
         const val KEY_ORIENTATION = "reader_orientation"
         const val KEY_VOLUME_PAGE_TURNS = "reader_volume_page_turns"

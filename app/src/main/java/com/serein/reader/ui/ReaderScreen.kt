@@ -88,7 +88,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -591,7 +590,6 @@ private fun PagedReader(
                 beyondViewportPageCount = 1,
             ) { index ->
                 val page = pages[index]
-                val pageOffset = (pagerState.currentPage - index) + pagerState.currentPageOffsetFraction
                 PageContent(
                     book = book,
                     chapterTitle = content.chapters[page.chapterIndex].title,
@@ -606,7 +604,6 @@ private fun PagedReader(
                     onNext = {
                         if (index < pages.lastIndex) pagerState.requestScrollToPage(index + 1)
                     },
-                    pageOffset = if (preferences.animatedPageTurns) pageOffset else 0f,
                 )
             }
         }
@@ -667,24 +664,6 @@ private fun precedingPages(
     return pages.takeLast(count)
 }
 
-/**
- * A page shrinks slightly and dims under a soft scrim as it slides past its neighbor, then
- * settles back to flat (scale 1, no scrim) once it's fully at rest. The scrim is drawn *inside*
- * the page's own bounds rather than relying on drop-shadow bleed outside them — pages sit flush
- * against each other with no gap, so an external shadow would have nowhere visible to fall and a
- * plain scale-down would just reveal identically-colored background. Uses only [pageOffset]'s
- * magnitude so it looks correct regardless of swipe direction.
- */
-private fun Modifier.pageTurnScale(pageOffset: Float): Modifier = graphicsLayer {
-    val magnitude = kotlin.math.abs(pageOffset.coerceIn(-1f, 1f))
-    val scale = 1f - (0.03f * magnitude)
-    scaleX = scale
-    scaleY = scale
-}
-
-private fun pageTurnScrimAlpha(pageOffset: Float): Float =
-    kotlin.math.abs(pageOffset.coerceIn(-1f, 1f)) * 0.35f
-
 @Composable
 private fun PageContent(
     book: BookRecord,
@@ -698,12 +677,11 @@ private fun PageContent(
     onLinkTap: (Int, Int) -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    pageOffset: Float = 0f,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalSereinPalette.current
     val tapZoneWidth = if (preferences.wideTapZones) 82.dp else 34.dp
-    Box(modifier.fillMaxSize().pageTurnScale(pageOffset)) {
+    Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(horizontal = preferences.marginWidth.dp, vertical = 18.dp)) {
             if (page.isChapterStart) {
                 Row(Modifier.fillMaxWidth().height(116.dp), verticalAlignment = Alignment.Top) {
@@ -744,10 +722,6 @@ private fun PageContent(
         }
         Box(Modifier.align(Alignment.CenterStart).width(tapZoneWidth).fillMaxHeight().clickable(onClick = onPrevious))
         Box(Modifier.align(Alignment.CenterEnd).width(tapZoneWidth).fillMaxHeight().clickable(onClick = onNext))
-        val scrimAlpha = pageTurnScrimAlpha(pageOffset)
-        if (scrimAlpha > 0f) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrimAlpha)))
-        }
     }
 }
 
