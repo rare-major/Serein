@@ -67,6 +67,8 @@ data class ReaderPreferences(
     val font: ReaderFont = ReaderFont.LORA,
     val textSize: Int = 18,
     val lineHeight: Float = 1.65f,
+    val marginWidth: Int = 28,
+    val justifyText: Boolean = false,
     val bionicReading: Boolean = false,
     val readingMode: ReadingMode = ReadingMode.PAGED,
     /** -1 follows the system brightness; values from 0.05 to 1 override it. */

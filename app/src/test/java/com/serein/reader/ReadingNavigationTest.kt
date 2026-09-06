@@ -9,6 +9,7 @@ import com.serein.reader.ui.boundedBitmapSampleSize
 import com.serein.reader.ui.coverSampleSize
 import com.serein.reader.ui.pageSummary
 import com.serein.reader.ui.readerTransitionKey
+import com.serein.reader.ui.readingTimeSummary
 import com.serein.reader.ui.buildScrollBlocks
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -60,6 +61,28 @@ class ReadingNavigationTest {
     fun footerUsesCorrectPageGrammar() {
         assertEquals("1 page left  ·  1 / 2", pageSummary(1, 1, 2, paged = true))
         assertEquals("about 3 pages left  ·  2 / 5", pageSummary(3, 2, 5, paged = false))
+    }
+
+    @Test
+    fun readingTimeSummaryOmitsTheEstimateBeforeItIsKnown() {
+        assertEquals("37% read", readingTimeSummary(0.37f, minutesLeft = null))
+    }
+
+    @Test
+    fun readingTimeSummaryUsesMinutesUnderAnHour() {
+        assertEquals("10% read  ·  1 min left", readingTimeSummary(0.10f, minutesLeft = 1))
+        assertEquals("10% read  ·  42 min left", readingTimeSummary(0.10f, minutesLeft = 42))
+    }
+
+    @Test
+    fun readingTimeSummarySwitchesToHoursPastSixtyMinutes() {
+        assertEquals("5% read  ·  2 hr left", readingTimeSummary(0.05f, minutesLeft = 120))
+        assertEquals("5% read  ·  2h 15m left", readingTimeSummary(0.05f, minutesLeft = 135))
+    }
+
+    @Test
+    fun readingTimeSummaryHidesTheEstimateOnceTheBookIsFinished() {
+        assertEquals("100% read", readingTimeSummary(1f, minutesLeft = 30))
     }
 
     @Test

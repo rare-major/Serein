@@ -152,6 +152,19 @@ internal fun ReaderSettingsSheet(
                 { onChange { it.copy(lineHeight = (it.lineHeight + 0.1f).coerceAtMost(2f)) } },
             )
             SettingsDivider()
+            SettingStepper(
+                "Margins", "${preferences.marginWidth} dp", preferences.marginWidth > 16,
+                preferences.marginWidth < 48,
+                { onChange { it.copy(marginWidth = (it.marginWidth - 4).coerceAtLeast(16)) } },
+                { onChange { it.copy(marginWidth = (it.marginWidth + 4).coerceAtMost(48)) } },
+            )
+            SettingsDivider()
+            SettingsSwitch(
+                label = "Justify text",
+                checked = preferences.justifyText,
+                onCheckedChange = { enabled -> onChange { it.copy(justifyText = enabled) } },
+            )
+            SettingsDivider()
             Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                 SettingsLabel("Bionic Reading", Modifier.weight(1f))
                 Text("50%", color = palette.mutedInk, fontSize = 12.sp)

@@ -245,6 +245,8 @@ class BookRepository(private val context: Context) {
         }.getOrDefault(ReaderFont.LORA),
         textSize = preferences.getInt(KEY_TEXT_SIZE, 18).coerceIn(14, 30),
         lineHeight = preferences.getFloat(KEY_LINE_HEIGHT, 1.65f).coerceIn(1.3f, 2.0f),
+        marginWidth = preferences.getInt(KEY_MARGIN_WIDTH, 28).coerceIn(16, 48),
+        justifyText = preferences.getBoolean(KEY_JUSTIFY_TEXT, false),
         bionicReading = preferences.getBoolean(KEY_BIONIC, false),
         readingMode = runCatching {
             ReadingMode.valueOf(
@@ -266,6 +268,8 @@ class BookRepository(private val context: Context) {
             .putString(KEY_FONT, readerPreferences.font.name)
             .putInt(KEY_TEXT_SIZE, readerPreferences.textSize)
             .putFloat(KEY_LINE_HEIGHT, readerPreferences.lineHeight)
+            .putInt(KEY_MARGIN_WIDTH, readerPreferences.marginWidth)
+            .putBoolean(KEY_JUSTIFY_TEXT, readerPreferences.justifyText)
             .putBoolean(KEY_BIONIC, readerPreferences.bionicReading)
             .putString(KEY_READING_MODE, readerPreferences.readingMode.name)
             .putFloat(KEY_BRIGHTNESS, readerPreferences.brightness)
@@ -682,6 +686,8 @@ class BookRepository(private val context: Context) {
         .put("font", value.font.name)
         .put("textSize", value.textSize)
         .put("lineHeight", value.lineHeight.toDouble())
+        .put("marginWidth", value.marginWidth)
+        .put("justifyText", value.justifyText)
         .put("bionicReading", value.bionicReading)
         .put("readingMode", value.readingMode.name)
         .put("brightness", value.brightness.toDouble())
@@ -695,6 +701,8 @@ class BookRepository(private val context: Context) {
         font = runCatching { ReaderFont.valueOf(optString("font")) }.getOrDefault(ReaderFont.LORA),
         textSize = optInt("textSize", 18).coerceIn(14, 30),
         lineHeight = optDouble("lineHeight", 1.65).toFloat().coerceIn(1.3f, 2f),
+        marginWidth = optInt("marginWidth", 28).coerceIn(16, 48),
+        justifyText = optBoolean("justifyText"),
         bionicReading = optBoolean("bionicReading"),
         readingMode = runCatching { ReadingMode.valueOf(optString("readingMode")) }.getOrDefault(ReadingMode.PAGED),
         brightness = optDouble("brightness", -1.0).toFloat().let { if (it < 0f) -1f else it.coerceIn(0.05f, 1f) },
@@ -777,6 +785,8 @@ class BookRepository(private val context: Context) {
         const val KEY_FONT = "reader_font"
         const val KEY_TEXT_SIZE = "reader_text_size"
         const val KEY_LINE_HEIGHT = "reader_line_height"
+        const val KEY_MARGIN_WIDTH = "reader_margin_width"
+        const val KEY_JUSTIFY_TEXT = "reader_justify_text"
         const val KEY_BIONIC = "reader_bionic"
         const val KEY_READING_MODE = "reader_reading_mode"
         const val KEY_BRIGHTNESS = "reader_brightness"

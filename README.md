@@ -27,7 +27,9 @@ All six states are rendered at 390 × 844 dp by the Compose screenshot test suit
 - Resume every book from its saved chapter, character position, and scroll offset.
 - Read in reflowed page mode or continuous scrolling mode.
 - Open large books quickly with incremental pagination that measures only nearby pages, and chunk oversized paragraphs to keep continuous scrolling responsive.
-- See percentage read, pages remaining, and current/total layout pages in a quiet footer.
+- See percentage read, an estimated reading time remaining based on your own pace this session, pages remaining, and current/total layout pages in a quiet footer.
+- Turn pages with a soft lift-and-shadow transition instead of an instant cut.
+- Adjust page margins and turn on full text justification.
 - Navigate with a table of contents and full-book text search.
 - Add persistent bookmarks and jump back to them from the Saved panel.
 - Long-press text to save word or sentence highlights, attach notes, and export annotations as Markdown or plain text.

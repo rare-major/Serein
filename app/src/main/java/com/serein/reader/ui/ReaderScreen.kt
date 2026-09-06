@@ -87,7 +87,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -150,6 +152,39 @@ private data class VisiblePosition(
     val pageCount: Int,
     val pageCountEstimated: Boolean = true,
 )
+
+/**
+ * Tracks this session's own reading pace so the footer can show "N min left". Starts from a
+ * plausible silent-reading default and blends toward the reader's live pace; a sample is ignored
+ * when the gap is too large (a TOC/search jump) or too long (the reader put the phone down), so
+ * neither corrupts the running average.
+ */
+private class ReadingSpeedEstimator {
+    private var lastSampleAtMs: Long = -1L
+    private var lastAbsoluteOffset: Int = -1
+    var charactersPerMinute: Double = DEFAULT_CHARACTERS_PER_MINUTE
+        private set
+
+    fun sample(absoluteOffset: Int, nowMs: Long) {
+        if (lastSampleAtMs >= 0L && lastAbsoluteOffset >= 0) {
+            val elapsedMs = nowMs - lastSampleAtMs
+            val advanced = absoluteOffset - lastAbsoluteOffset
+            if (elapsedMs in MIN_SAMPLE_INTERVAL_MS..MAX_SAMPLE_INTERVAL_MS && advanced in 1..MAX_PLAUSIBLE_CHARACTERS) {
+                val instantaneousRate = advanced / (elapsedMs / 60_000.0)
+                charactersPerMinute = (charactersPerMinute * 0.7) + (instantaneousRate * 0.3)
+            }
+        }
+        lastSampleAtMs = nowMs
+        lastAbsoluteOffset = absoluteOffset
+    }
+
+    private companion object {
+        const val DEFAULT_CHARACTERS_PER_MINUTE = 1_000.0
+        const val MIN_SAMPLE_INTERVAL_MS = 1_500L
+        const val MAX_SAMPLE_INTERVAL_MS = 120_000L
+        const val MAX_PLAUSIBLE_CHARACTERS = 6_000
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -250,6 +285,16 @@ fun ReaderScreen(
             kotlin.math.abs(it.characterOffset - visible.location.characterOffset) < 12
     }
 
+    val speedEstimator = remember(book.id) { ReadingSpeedEstimator() }
+    var estimatedMinutesLeft by remember(book.id) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(visible, content) {
+        val total = content?.totalCharacters() ?: return@LaunchedEffect
+        val absoluteOffset = (total * visible.location.progress).toInt().coerceIn(0, total)
+        speedEstimator.sample(absoluteOffset, System.currentTimeMillis())
+        val remainingCharacters = total - absoluteOffset
+        estimatedMinutesLeft = ceil(remainingCharacters / speedEstimator.charactersPerMinute).toInt().coerceAtLeast(0)
+    }
+
     Scaffold(
         containerColor = palette.paper,
         topBar = {
@@ -274,6 +319,7 @@ fun ReaderScreen(
                 page = visible.page,
                 pageCount = visible.pageCount,
                 paged = preferences.readingMode == ReadingMode.PAGED && !visible.pageCountEstimated,
+                minutesLeft = estimatedMinutesLeft,
             )
         },
     ) { safePadding ->
@@ -440,7 +486,7 @@ private fun PagedReader(
     )
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = androidx.compose.ui.platform.LocalDensity.current
-        val pageWidthPx = with(density) { (maxWidth - 56.dp).roundToPx() }
+        val pageWidthPx = with(density) { (maxWidth - preferences.marginWidth.dp * 2).roundToPx() }
         val normalHeightPx = with(density) { (maxHeight - 38.dp).roundToPx() }
         val firstHeightPx = with(density) { (maxHeight - 154.dp).roundToPx() }
         val anchorChapter = target?.chapterIndex ?: resumeLocation.chapterIndex
@@ -542,6 +588,7 @@ private fun PagedReader(
                 beyondViewportPageCount = 1,
             ) { index ->
                 val page = pages[index]
+                val pageOffset = (pagerState.currentPage - index) + pagerState.currentPageOffsetFraction
                 PageContent(
                     book = book,
                     chapterTitle = content.chapters[page.chapterIndex].title,
@@ -555,6 +602,7 @@ private fun PagedReader(
                     onNext = {
                         if (index < pages.lastIndex) pagerState.requestScrollToPage(index + 1)
                     },
+                    modifier = Modifier.pageTurnEffect(pageOffset),
                 )
             }
         }
@@ -615,6 +663,23 @@ private fun precedingPages(
     return pages.takeLast(count)
 }
 
+/**
+ * A page lifts slightly and gains a soft shadow as it slides past an adjacent page, then settles
+ * back to flat (scale 1, no shadow) once it's fully at rest — a lighter-weight stand-in for a
+ * true page curl, using only [pageOffset]'s magnitude so it looks correct regardless of swipe
+ * direction.
+ */
+private fun Modifier.pageTurnEffect(pageOffset: Float): Modifier = graphicsLayer {
+    val magnitude = kotlin.math.abs(pageOffset.coerceIn(-1f, 1f))
+    val scale = 1f - (0.04f * magnitude)
+    scaleX = scale
+    scaleY = scale
+    alpha = 1f - (0.08f * magnitude)
+    shadowElevation = 10f * magnitude
+    shape = RectangleShape
+    clip = false
+}
+
 @Composable
 private fun PageContent(
     book: BookRecord,
@@ -627,11 +692,12 @@ private fun PageContent(
     onSelection: (ReaderSelection) -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val palette = LocalSereinPalette.current
     val tapZoneWidth = if (preferences.wideTapZones) 82.dp else 34.dp
-    Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 28.dp, vertical = 18.dp)) {
+    Box(modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().padding(horizontal = preferences.marginWidth.dp, vertical = 18.dp)) {
             if (page.isChapterStart) {
                 Row(Modifier.fillMaxWidth().height(116.dp), verticalAlignment = Alignment.Top) {
                     Column(Modifier.weight(1f)) {
@@ -735,7 +801,9 @@ private fun ScrollingReader(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(28.dp, 30.dp, 28.dp, 44.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+            preferences.marginWidth.dp, 30.dp, preferences.marginWidth.dp, 44.dp,
+        ),
     ) {
         items(
             items = blocks,
@@ -898,6 +966,11 @@ private fun InteractiveReaderText(
     Text(
         text = rendered,
         style = style,
+        textAlign = if (preferences.justifyText) {
+            androidx.compose.ui.text.style.TextAlign.Justify
+        } else {
+            androidx.compose.ui.text.style.TextAlign.Start
+        },
         onTextLayout = { layoutResult = it },
         modifier = modifier.pointerInput(text, baseOffset) {
             detectTapGestures(
@@ -1013,7 +1086,7 @@ private fun ReaderTopBar(
 }
 
 @Composable
-private fun ReaderFooter(progress: Float, page: Int, pageCount: Int, paged: Boolean) {
+private fun ReaderFooter(progress: Float, page: Int, pageCount: Int, paged: Boolean, minutesLeft: Int?) {
     val palette = LocalSereinPalette.current
     val pagesLeft = (pageCount - page).coerceAtLeast(0)
     Surface(
@@ -1031,7 +1104,7 @@ private fun ReaderFooter(progress: Float, page: Int, pageCount: Int, paged: Bool
                 color = palette.sage, trackColor = palette.line,
             )
             Row(Modifier.padding(top = 7.dp)) {
-                Text("${(progress * 100).toInt()}% read", color = palette.mutedInk, fontSize = 11.sp)
+                Text(readingTimeSummary(progress, minutesLeft), color = palette.mutedInk, fontSize = 11.sp)
                 Spacer(Modifier.weight(1f))
                 Text(
                     pageSummary(pagesLeft, page, pageCount, paged),
@@ -1046,6 +1119,23 @@ internal fun pageSummary(pagesLeft: Int, page: Int, pageCount: Int, paged: Boole
     val pageLabel = if (pagesLeft == 1) "page" else "pages"
     val prefix = if (paged) "" else "about "
     return "$prefix$pagesLeft $pageLabel left  ·  $page / $pageCount"
+}
+
+internal fun readingTimeSummary(progress: Float, minutesLeft: Int?): String {
+    val percentLabel = "${(progress * 100).toInt()}% read"
+    val timeLabel = when {
+        minutesLeft == null -> null
+        progress >= 0.995f -> null
+        minutesLeft <= 0 -> "under a minute left"
+        minutesLeft == 1 -> "1 min left"
+        minutesLeft < 60 -> "$minutesLeft min left"
+        else -> {
+            val hours = minutesLeft / 60
+            val remainderMinutes = minutesLeft % 60
+            if (remainderMinutes == 0) "$hours hr left" else "${hours}h ${remainderMinutes}m left"
+        }
+    }
+    return if (timeLabel != null) "$percentLabel  ·  $timeLabel" else percentLabel
 }
 
 @Composable
