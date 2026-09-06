@@ -2,6 +2,22 @@
 
 Serein is a native Android EPUB reader built with Kotlin and Jetpack Compose. It pairs a quiet editorial interface with practical local reading controls. Its visual system applies Apple-inspired principles—purpose, simplicity, hierarchy, consistency, and craft—through native Android patterns rather than copying iOS chrome.
 
+## Screenshots
+
+| Library | Paged reader | Scrolling reader |
+| --- | --- | --- |
+| ![Library](docs/screenshots/library.png) | ![Paged reader](docs/screenshots/reader-paged.png) | ![Scrolling reader](docs/screenshots/reader-scrolling.png) |
+
+| Reader settings | Offline dictionary | Dark theme |
+| --- | --- | --- |
+| ![Reader settings](docs/screenshots/reader-settings.png) | ![Offline dictionary](docs/screenshots/dictionary.png) | ![Dark reader theme](docs/screenshots/dark-reader.png) |
+
+All six states are rendered at 390 × 844 dp by the Compose screenshot test suite (see [Verification](#verification)) — what you see above is what ships, not a mockup.
+
+## Features at a glance
+
+<img src="docs/feature-card.png" alt="Serein feature colophon: library, reading, typography &amp; comfort, language, and insight, plus a note on privacy" width="480">
+
 ## What works
 
 - Import EPUB or PDF files with Android's system document picker.
