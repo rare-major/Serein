@@ -7,3 +7,4 @@ captures/
 *.iml
 /signing/
 /*.apk
+.DS_Store

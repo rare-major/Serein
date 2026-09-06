@@ -87,7 +87,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -114,6 +113,7 @@ import com.serein.reader.data.BionicReading
 import com.serein.reader.data.BookContent
 import com.serein.reader.data.BookBlockKind
 import com.serein.reader.data.BookInlineSpan
+import com.serein.reader.data.BookInlineStyle
 import com.serein.reader.data.BookSearchResult
 import com.serein.reader.data.BookmarkRecord
 import com.serein.reader.data.BookRecord
@@ -345,6 +345,7 @@ fun ReaderScreen(
                     },
                     onToggleControls = { controlsVisible = !controlsVisible },
                     onSelection = { selection = it },
+                    onLinkTap = { chapter, offset -> target = ReaderTarget(chapter, offset) },
                 )
             } else {
                 ScrollingReader(
@@ -363,6 +364,7 @@ fun ReaderScreen(
                     },
                     onToggleControls = { controlsVisible = !controlsVisible },
                     onSelection = { selection = it },
+                    onLinkTap = { chapter, offset -> target = ReaderTarget(chapter, offset) },
                 )
             }
 
@@ -474,6 +476,7 @@ private fun PagedReader(
     onVisiblePosition: (VisiblePosition) -> Unit,
     onToggleControls: () -> Unit,
     onSelection: (ReaderSelection) -> Unit,
+    onLinkTap: (Int, Int) -> Unit,
 ) {
     val palette = LocalSereinPalette.current
     val textMeasurer = rememberTextMeasurer()
@@ -598,11 +601,12 @@ private fun PagedReader(
                     textStyle = style,
                     onToggleControls = onToggleControls,
                     onSelection = onSelection,
+                    onLinkTap = onLinkTap,
                     onPrevious = { if (index > 0) pagerState.requestScrollToPage(index - 1) },
                     onNext = {
                         if (index < pages.lastIndex) pagerState.requestScrollToPage(index + 1)
                     },
-                    modifier = Modifier.pageTurnEffect(pageOffset),
+                    pageOffset = if (preferences.animatedPageTurns) pageOffset else 0f,
                 )
             }
         }
@@ -664,21 +668,22 @@ private fun precedingPages(
 }
 
 /**
- * A page lifts slightly and gains a soft shadow as it slides past an adjacent page, then settles
- * back to flat (scale 1, no shadow) once it's fully at rest — a lighter-weight stand-in for a
- * true page curl, using only [pageOffset]'s magnitude so it looks correct regardless of swipe
- * direction.
+ * A page shrinks slightly and dims under a soft scrim as it slides past its neighbor, then
+ * settles back to flat (scale 1, no scrim) once it's fully at rest. The scrim is drawn *inside*
+ * the page's own bounds rather than relying on drop-shadow bleed outside them — pages sit flush
+ * against each other with no gap, so an external shadow would have nowhere visible to fall and a
+ * plain scale-down would just reveal identically-colored background. Uses only [pageOffset]'s
+ * magnitude so it looks correct regardless of swipe direction.
  */
-private fun Modifier.pageTurnEffect(pageOffset: Float): Modifier = graphicsLayer {
+private fun Modifier.pageTurnScale(pageOffset: Float): Modifier = graphicsLayer {
     val magnitude = kotlin.math.abs(pageOffset.coerceIn(-1f, 1f))
-    val scale = 1f - (0.04f * magnitude)
+    val scale = 1f - (0.03f * magnitude)
     scaleX = scale
     scaleY = scale
-    alpha = 1f - (0.08f * magnitude)
-    shadowElevation = 10f * magnitude
-    shape = RectangleShape
-    clip = false
 }
+
+private fun pageTurnScrimAlpha(pageOffset: Float): Float =
+    kotlin.math.abs(pageOffset.coerceIn(-1f, 1f)) * 0.35f
 
 @Composable
 private fun PageContent(
@@ -690,13 +695,15 @@ private fun PageContent(
     textStyle: TextStyle,
     onToggleControls: () -> Unit,
     onSelection: (ReaderSelection) -> Unit,
+    onLinkTap: (Int, Int) -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    pageOffset: Float = 0f,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalSereinPalette.current
     val tapZoneWidth = if (preferences.wideTapZones) 82.dp else 34.dp
-    Box(modifier.fillMaxSize()) {
+    Box(modifier.fillMaxSize().pageTurnScale(pageOffset)) {
         Column(Modifier.fillMaxSize().padding(horizontal = preferences.marginWidth.dp, vertical = 18.dp)) {
             if (page.isChapterStart) {
                 Row(Modifier.fillMaxWidth().height(116.dp), verticalAlignment = Alignment.Top) {
@@ -730,12 +737,17 @@ private fun PageContent(
             } else {
                 InteractiveReaderText(
                     page.text, page.chapterIndex, page.startOffset, preferences, highlights,
-                    page.inlineSpans, textStyle, onToggleControls, onSelection, Modifier.fillMaxWidth(),
+                    page.inlineSpans, textStyle, onToggleControls, onSelection,
+                    onLinkTap = onLinkTap, modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
         Box(Modifier.align(Alignment.CenterStart).width(tapZoneWidth).fillMaxHeight().clickable(onClick = onPrevious))
         Box(Modifier.align(Alignment.CenterEnd).width(tapZoneWidth).fillMaxHeight().clickable(onClick = onNext))
+        val scrimAlpha = pageTurnScrimAlpha(pageOffset)
+        if (scrimAlpha > 0f) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = scrimAlpha)))
+        }
     }
 }
 
@@ -751,6 +763,7 @@ private fun ScrollingReader(
     onVisiblePosition: (VisiblePosition) -> Unit,
     onToggleControls: () -> Unit,
     onSelection: (ReaderSelection) -> Unit,
+    onLinkTap: (Int, Int) -> Unit,
 ) {
     val palette = LocalSereinPalette.current
     val blocks = remember(content) { buildScrollBlocks(content) }
@@ -831,6 +844,7 @@ private fun ScrollingReader(
                 bodyStyle = style,
                 onToggleControls = onToggleControls,
                 onSelection = onSelection,
+                onLinkTap = onLinkTap,
             )
         }
     }
@@ -844,6 +858,7 @@ private fun RichScrollBlock(
     bodyStyle: TextStyle,
     onToggleControls: () -> Unit,
     onSelection: (ReaderSelection) -> Unit,
+    onLinkTap: (Int, Int) -> Unit,
 ) {
     val palette = LocalSereinPalette.current
     when (block.kind) {
@@ -871,7 +886,7 @@ private fun RichScrollBlock(
                 lineHeight = ((preferences.textSize + 3) * 1.28f).sp,
                 fontWeight = FontWeight.SemiBold,
             ),
-            onToggleControls, onSelection,
+            onToggleControls, onSelection, onLinkTap,
             Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 16.dp),
         )
         BookBlockKind.QUOTE -> Row(
@@ -882,13 +897,13 @@ private fun RichScrollBlock(
                 block.text, block.chapterIndex, block.startOffset, preferences, highlights,
                 block.inlineSpans,
                 bodyStyle.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
-                onToggleControls, onSelection,
+                onToggleControls, onSelection, onLinkTap,
                 Modifier.weight(1f).padding(start = 15.dp),
             )
         }
         else -> InteractiveReaderText(
             block.text, block.chapterIndex, block.startOffset, preferences, highlights,
-            block.inlineSpans, bodyStyle, onToggleControls, onSelection,
+            block.inlineSpans, bodyStyle, onToggleControls, onSelection, onLinkTap,
             Modifier.fillMaxWidth().padding(bottom = 22.dp),
         )
     }
@@ -957,6 +972,7 @@ private fun InteractiveReaderText(
     style: TextStyle,
     onTap: () -> Unit,
     onSelection: (ReaderSelection) -> Unit,
+    onLinkTap: (Int, Int) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     var layoutResult by remember(text) { mutableStateOf<TextLayoutResult?>(null) }
@@ -972,9 +988,23 @@ private fun InteractiveReaderText(
             androidx.compose.ui.text.style.TextAlign.Start
         },
         onTextLayout = { layoutResult = it },
-        modifier = modifier.pointerInput(text, baseOffset) {
+        modifier = modifier.pointerInput(text, baseOffset, inlineSpans) {
             detectTapGestures(
-                onTap = { onTap() },
+                onTap = { position ->
+                    val layout = layoutResult
+                    val tappedOffset = layout?.getOffsetForPosition(position)
+                    val link = tappedOffset?.let { local ->
+                        inlineSpans.firstOrNull {
+                            it.style == BookInlineStyle.UNDERLINE && it.targetChapterIndex != null &&
+                                local in it.start until it.end
+                        }
+                    }
+                    if (link != null) {
+                        onLinkTap(link.targetChapterIndex!!, link.targetCharacterOffset ?: 0)
+                    } else {
+                        onTap()
+                    }
+                },
                 onLongPress = { position ->
                     val layout = layoutResult ?: return@detectTapGestures
                     if (text.isEmpty()) return@detectTapGestures

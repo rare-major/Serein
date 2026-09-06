@@ -172,6 +172,93 @@ class EpubParserTest {
     }
 
     @Test
+    fun resolvesIndexPageLinksToTheChapterAndHeadingTheyPointAt() {
+        val epub = temporaryFolder.newFile("index-links.epub")
+        ZipOutputStream(epub.outputStream()).use { zip ->
+            zip.add("META-INF/container.xml", containerXml)
+            zip.add(
+                "OEBPS/content.opf",
+                """
+                <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+                  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                    <dc:title>Linked book</dc:title>
+                    <dc:creator>Sample Author</dc:creator>
+                  </metadata>
+                  <manifest>
+                    <item id="index" href="text/index.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="chapter2" href="text/chapter2.xhtml" media-type="application/xhtml+xml"/>
+                    <item id="chapter3" href="text/chapter3.xhtml" media-type="application/xhtml+xml"/>
+                  </manifest>
+                  <spine>
+                    <itemref idref="index"/>
+                    <itemref idref="chapter2"/>
+                    <itemref idref="chapter3"/>
+                  </spine>
+                </package>
+                """.trimIndent(),
+            )
+            zip.add(
+                "OEBPS/text/index.xhtml",
+                """
+                <html xmlns="http://www.w3.org/1999/xhtml">
+                  <head><title>Index</title></head>
+                  <body>
+                    <h1>Index</h1>
+                    <p><a href="chapter2.xhtml#sec2">Jump to chapter two</a></p>
+                    <p><a href="chapter3.xhtml">Jump to chapter three</a></p>
+                    <p><a href="https://example.com/">An external link</a></p>
+                  </body>
+                </html>
+                """.trimIndent(),
+            )
+            zip.add(
+                "OEBPS/text/chapter2.xhtml",
+                """
+                <html xmlns="http://www.w3.org/1999/xhtml">
+                  <head><title>Chapter Two</title></head>
+                  <body>
+                    <h1>Chapter Two</h1>
+                    <p>Filler so the heading is not the only paragraph.</p>
+                    <h2 id="sec2">Section two</h2>
+                    <p>The section the index points at.</p>
+                  </body>
+                </html>
+                """.trimIndent(),
+            )
+            zip.add(
+                "OEBPS/text/chapter3.xhtml",
+                """
+                <html xmlns="http://www.w3.org/1999/xhtml">
+                  <head><title>Chapter Three</title></head>
+                  <body><h1>Chapter Three</h1><p>Its own opening line.</p></body>
+                </html>
+                """.trimIndent(),
+            )
+        }
+
+        val chapters = EpubParser.readContent(epub).chapters
+        val indexLinks = chapters[0].blocks.flatMap { it.inlineSpans }
+            .filter { it.style == BookInlineStyle.UNDERLINE }
+
+        val toSectionTwo = indexLinks.first { it.target == "chapter2.xhtml#sec2" }
+        assertEquals(1, toSectionTwo.targetChapterIndex)
+        val sectionTwoOffset = chapters[1].readingLengthUpTo("Section two")
+        assertEquals(sectionTwoOffset, toSectionTwo.targetCharacterOffset)
+
+        val toChapterThree = indexLinks.first { it.target == "chapter3.xhtml" }
+        assertEquals(2, toChapterThree.targetChapterIndex)
+        assertEquals(0, toChapterThree.targetCharacterOffset)
+
+        val toExternal = indexLinks.first { it.target == "https://example.com/" }
+        assertEquals(null, toExternal.targetChapterIndex)
+    }
+
+    private fun com.serein.reader.data.BookChapter.readingLengthUpTo(paragraphStartingWith: String): Int {
+        val index = paragraphs.indexOfFirst { it.startsWith(paragraphStartingWith) }
+        return paragraphs.take(index).sumOf { it.length + 2 }
+    }
+
+    @Test
     fun createsANewAssetDirectoryBeforeApplyingItsStorageBudget() {
         val epub = temporaryFolder.newFile("new-assets.epub")
         ZipOutputStream(epub.outputStream()).use { zip ->

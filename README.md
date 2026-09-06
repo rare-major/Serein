@@ -28,9 +28,10 @@ All six states are rendered at 390 × 844 dp by the Compose screenshot test suit
 - Read in reflowed page mode or continuous scrolling mode.
 - Open large books quickly with incremental pagination that measures only nearby pages, and chunk oversized paragraphs to keep continuous scrolling responsive.
 - See percentage read, an estimated reading time remaining based on your own pace this session, pages remaining, and current/total layout pages in a quiet footer.
-- Turn pages with a soft lift-and-shadow transition instead of an instant cut.
+- Turn pages with a soft lift-and-shadow transition instead of an instant cut, with a setting to turn it off.
 - Adjust page margins and turn on full text justification.
 - Navigate with a table of contents and full-book text search.
+- Tap a link on a book's own Index or Contents page to jump straight to the chapter or heading it points to.
 - Add persistent bookmarks and jump back to them from the Saved panel.
 - Long-press text to save word or sentence highlights, attach notes, and export annotations as Markdown or plain text.
 - Look up selected English words entirely offline with the bundled Open English WordNet database, and keep recent words in vocabulary history.
@@ -42,7 +43,7 @@ All six states are rendered at 390 × 844 dp by the Compose screenshot test suit
 - Adjust in-reader brightness, lock orientation, keep the screen awake, widen tap zones, and optionally turn pages with the volume buttons.
 - View daily reading time, pages read, reading streak, and completed-book totals.
 - Back up and restore the library, EPUB files, covers, progress, annotations, settings, vocabulary history, and statistics as one Serein backup.
-- Open the creator credit from the library to visit [rare-major](https://github.com/rare-major) on GitHub.
+- See a brief launch splash with the Serein mark, then open the creator credit to visit [rare-major](https://github.com/rare-major) on GitHub.
 - Remove imported books, their local files, bookmarks, and highlights.
 
 The app includes a small built-in sample so the reader experience is visible on first launch. Imported files, reading positions, bookmarks, highlights, notes, preferences, dictionary lookups, and statistics stay on the device. Dictionary definitions are resolved locally from Open English WordNet 2025. Serein requests no network permission and disables Android automatic backup; data leaves the app only when the user explicitly chooses an annotation or Serein-library backup destination.

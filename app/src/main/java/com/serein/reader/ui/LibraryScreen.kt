@@ -1,8 +1,6 @@
 package com.serein.reader.ui
 
-import android.content.Intent
 import android.graphics.BitmapFactory
-import android.net.Uri
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -69,14 +67,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.serein.reader.R
@@ -201,11 +193,6 @@ fun LibraryScreen(
                     }
                 }
             }
-            CreatorCredit(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = 10.dp),
-            )
         }
 
         if (isImporting) {
@@ -752,32 +739,3 @@ private fun EmptyLibrary(
     }
 }
 
-@Composable
-private fun CreatorCredit(modifier: Modifier = Modifier) {
-    val palette = LocalSereinPalette.current
-    val context = LocalContext.current
-    val profileUrl = stringResource(R.string.creator_github_url)
-    Text(
-        text = buildAnnotatedString {
-            append("Made by ")
-            withStyle(SpanStyle(color = palette.sage, fontWeight = FontWeight.SemiBold)) {
-                append("rare-major")
-            }
-        },
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(
-                role = Role.Button,
-                onClickLabel = "Open rare-major on GitHub",
-                onClick = {
-                    runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(profileUrl)))
-                    }
-                },
-            )
-            .padding(vertical = 9.dp),
-        color = palette.mutedInk,
-        fontSize = 12.sp,
-        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-    )
-}

@@ -115,6 +115,14 @@ internal fun ReaderSettingsSheet(
                     }
                 }
             }
+            if (preferences.readingMode == ReadingMode.PAGED) {
+                SettingsDivider()
+                SettingsSwitch(
+                    label = "Page turn animation",
+                    checked = preferences.animatedPageTurns,
+                    onCheckedChange = { enabled -> onChange { it.copy(animatedPageTurns = enabled) } },
+                )
+            }
             SettingsDivider()
             Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                 SettingsLabel("Font", Modifier.weight(1f))

@@ -85,17 +85,17 @@ object EpubParser {
                 .mapNotNull { it.getAttribute("idref").takeIf(String::isNotBlank) }
             require(spineIds.size <= MAX_SPINE_CHAPTERS) { "This EPUB contains too many chapters." }
 
-            val chapters = spineIds.mapNotNull { id ->
+            val parsedChapters = spineIds.mapNotNull { id ->
                 val item = packageData.manifest[id] ?: return@mapNotNull null
                 if (!item.mediaType.contains("html") && !item.mediaType.contains("xhtml")) {
                     return@mapNotNull null
                 }
                 val entryPath = resolvePath(packageData.opfPath, item.href)
                 val entry = zip.getEntry(entryPath) ?: return@mapNotNull null
-                parseChapter(zip, entryPath, assetDirectory, xmlBudget, assetBudget)
-            }.filter { it.paragraphs.any(String::isNotBlank) }
+                entryPath to parseChapter(zip, entryPath, assetDirectory, xmlBudget, assetBudget)
+            }.filter { (_, parsed) -> parsed.chapter.paragraphs.any(String::isNotBlank) }
 
-            if (chapters.isEmpty()) {
+            if (parsedChapters.isEmpty()) {
                 return BookContent(
                     listOf(
                         BookChapter(
@@ -104,6 +104,13 @@ object EpubParser {
                         )
                     )
                 )
+            }
+            val pathToChapterIndex = parsedChapters.withIndex()
+                .associate { (index, entry) -> entry.first to index }
+            val chapters = parsedChapters.mapIndexed { chapterIndex, (chapterPath, parsed) ->
+                resolveInternalLinks(parsed.chapter, chapterIndex, chapterPath, pathToChapterIndex) { targetIndex ->
+                    parsedChapters[targetIndex].second.anchorOffsets
+                }
             }
             return BookContent(chapters)
         }
@@ -168,13 +175,16 @@ object EpubParser {
         return output.absolutePath
     }
 
+    /** A parsed chapter plus where its anchor ids land, so another chapter's link can resolve into it. */
+    private data class ParsedChapter(val chapter: BookChapter, val anchorOffsets: Map<String, Int>)
+
     private fun parseChapter(
         zip: ZipFile,
         chapterPath: String,
         assetDirectory: File?,
         xmlBudget: ByteBudget,
         assetBudget: AssetBudget?,
-    ): BookChapter {
+    ): ParsedChapter {
         return try {
             val entry = zip.getEntry(chapterPath) ?: error("Chapter is missing")
             val document = zip.getInputStream(entry).use { parseXml(it, xmlBudget) }
@@ -194,22 +204,89 @@ object EpubParser {
                     removeAt(0)
                 }
             }
-            val paragraphs = contentBlocks.mapNotNull { block ->
-                when (block.kind) {
+            val paragraphs = mutableListOf<String>()
+            val anchorOffsets = mutableMapOf<String, Int>()
+            var runningOffset = 0
+            contentBlocks.forEach { block ->
+                val representation = when (block.kind) {
                     BookBlockKind.IMAGE -> block.altText.takeIf(String::isNotBlank)?.let { "[$it]" }
                     BookBlockKind.SEPARATOR -> "• • •"
                     else -> block.text.takeIf(String::isNotBlank)
                 }
+                if (representation != null) {
+                    block.anchorId?.let { id -> anchorOffsets.putIfAbsent(id, runningOffset) }
+                    paragraphs.add(representation)
+                    runningOffset += representation.length + 2
+                }
             }
-            BookChapter(title, paragraphs, contentBlocks)
+            ParsedChapter(BookChapter(title, paragraphs, contentBlocks), anchorOffsets)
         } catch (exception: ArchiveQuotaException) {
             throw exception
         } catch (_: Exception) {
-            BookChapter(
-                chapterPath.substringAfterLast('/').substringBeforeLast('.'),
-                listOf("This chapter could not be rendered because its markup is not valid XHTML."),
+            ParsedChapter(
+                BookChapter(
+                    chapterPath.substringAfterLast('/').substringBeforeLast('.'),
+                    listOf("This chapter could not be rendered because its markup is not valid XHTML."),
+                ),
+                emptyMap(),
             )
         }
+    }
+
+    /**
+     * Resolves each `<a href>`-derived [BookInlineSpan] in this chapter to a concrete
+     * (chapterIndex, characterOffset) when it points inside this same book — e.g. a real Index or
+     * Contents page linking to a heading elsewhere. Links that don't resolve (external URLs,
+     * hrefs pointing at a non-chapter manifest item, missing anchors) are left inert rather than
+     * guessed at.
+     */
+    private fun resolveInternalLinks(
+        chapter: BookChapter,
+        chapterIndex: Int,
+        chapterPath: String,
+        pathToChapterIndex: Map<String, Int>,
+        anchorOffsetsFor: (Int) -> Map<String, Int>,
+    ): BookChapter {
+        fun hasResolvableLink(spans: List<BookInlineSpan>) =
+            spans.any { it.style == BookInlineStyle.UNDERLINE && !it.target.isNullOrBlank() }
+        if (chapter.blocks.none { hasResolvableLink(it.inlineSpans) }) return chapter
+
+        val resolvedBlocks = chapter.blocks.map { block ->
+            if (!hasResolvableLink(block.inlineSpans)) return@map block
+            block.copy(
+                inlineSpans = block.inlineSpans.map { span ->
+                    if (span.style != BookInlineStyle.UNDERLINE || span.target.isNullOrBlank()) return@map span
+                    val resolved = resolveHref(span.target, chapterPath, chapterIndex, pathToChapterIndex, anchorOffsetsFor)
+                    if (resolved == null) span else span.copy(
+                        targetChapterIndex = resolved.first,
+                        targetCharacterOffset = resolved.second,
+                    )
+                },
+            )
+        }
+        return chapter.copy(blocks = resolvedBlocks)
+    }
+
+    private fun resolveHref(
+        rawHref: String,
+        currentChapterPath: String,
+        currentChapterIndex: Int,
+        pathToChapterIndex: Map<String, Int>,
+        anchorOffsetsFor: (Int) -> Map<String, Int>,
+    ): Pair<Int, Int>? {
+        if (rawHref.contains("://") || rawHref.startsWith("mailto:")) return null
+        val decoded = runCatching { URLDecoder.decode(rawHref, Charsets.UTF_8.name()) }.getOrDefault(rawHref)
+        val hashIndex = decoded.indexOf('#')
+        val pathPart = if (hashIndex >= 0) decoded.substring(0, hashIndex) else decoded
+        val fragment = (if (hashIndex >= 0) decoded.substring(hashIndex + 1) else null)?.takeIf(String::isNotBlank)
+
+        val targetChapterIndex = if (pathPart.isBlank()) {
+            currentChapterIndex
+        } else {
+            pathToChapterIndex[resolvePath(currentChapterPath, pathPart)] ?: return null
+        }
+        val offset = fragment?.let { anchorOffsetsFor(targetChapterIndex)[it] ?: return null } ?: 0
+        return targetChapterIndex to offset
     }
 
     private fun extractBlocks(
@@ -260,6 +337,7 @@ object EpubParser {
             inlineSpans = extracted.spans.map { span ->
                 span.copy(start = span.start + prefix.length, end = span.end + prefix.length)
             },
+            anchorId = element.getAttribute("id").ifBlank { null },
         )
     }
 

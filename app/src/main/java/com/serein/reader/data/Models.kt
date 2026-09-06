@@ -25,7 +25,11 @@ data class BookInlineSpan(
     val start: Int,
     val end: Int,
     val style: BookInlineStyle,
+    /** The link's raw href from the source markup, kept for reference; unresolved external links leave [targetChapterIndex] null. */
     val target: String? = null,
+    /** Set only when [target] resolves to a location inside this same book (e.g. an Index page linking to a chapter). */
+    val targetChapterIndex: Int? = null,
+    val targetCharacterOffset: Int? = null,
 )
 
 data class BookBlock(
@@ -34,6 +38,8 @@ data class BookBlock(
     val imagePath: String? = null,
     val altText: String = "",
     val inlineSpans: List<BookInlineSpan> = emptyList(),
+    /** The source element's id attribute, if any — how another chapter's link can target this block. */
+    val anchorId: String? = null,
 )
 
 data class BookChapter(
@@ -71,6 +77,7 @@ data class ReaderPreferences(
     val justifyText: Boolean = false,
     val bionicReading: Boolean = false,
     val readingMode: ReadingMode = ReadingMode.PAGED,
+    val animatedPageTurns: Boolean = true,
     /** -1 follows the system brightness; values from 0.05 to 1 override it. */
     val brightness: Float = -1f,
     val orientation: ReaderOrientation = ReaderOrientation.SYSTEM,
