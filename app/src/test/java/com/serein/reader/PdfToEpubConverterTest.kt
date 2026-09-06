@@ -4,6 +4,8 @@ import com.serein.reader.data.PdfToEpubConverter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayInputStream
+import javax.xml.parsers.DocumentBuilderFactory
 
 private const val FORM_FEED = ''
 private const val VERTICAL_TAB = ''
@@ -87,5 +89,45 @@ class PdfToEpubConverterTest {
         val escaped = PdfToEpubConverter.escapeXml("Tom & Jerry <says> \"hi\"")
 
         assertEquals("Tom &amp; Jerry &lt;says&gt; &quot;hi&quot;", escaped)
+    }
+
+    // Regression coverage for a real bug: joining several paragraphs/items with a manually
+    // indented separator (e.g. "\n    ") before Kotlin's trimIndent() runs lets those joined
+    // lines set the *global* minimum indentation trimIndent subtracts from every line — leaving
+    // stray whitespace before the XML declaration on the template's own lines once a real,
+    // multi-paragraph PDF was converted. A single paragraph or chapter never triggered it, which
+    // is exactly why it shipped unnoticed. These parse the generated markup with a real XML
+    // parser rather than just inspecting the string, since that's what actually caught it.
+
+    @Test
+    fun chapterXhtmlParsesWithSeveralParagraphs() {
+        val xml = PdfToEpubConverter.chapterXhtml(
+            "Chapter One",
+            listOf("First paragraph.", "Second paragraph.", "Third paragraph.", "Fourth paragraph."),
+        )
+
+        assertWellFormedXml(xml)
+        assertTrue(xml.trimStart().startsWith("<?xml"))
+    }
+
+    @Test
+    fun navXhtmlParsesWithSeveralChapters() {
+        val xml = PdfToEpubConverter.navXhtml("Book", listOf("Chapter One", "Chapter Two", "Chapter Three"))
+
+        assertWellFormedXml(xml)
+        assertTrue(xml.trimStart().startsWith("<?xml"))
+    }
+
+    @Test
+    fun packageOpfParsesWithSeveralChapters() {
+        val xml = PdfToEpubConverter.packageOpf("Book", "Author", chapterCount = 5, hasCover = true)
+
+        assertWellFormedXml(xml)
+        assertTrue(xml.trimStart().startsWith("<?xml"))
+    }
+
+    private fun assertWellFormedXml(xml: String) {
+        val builder = DocumentBuilderFactory.newInstance().newDocumentBuilder()
+        builder.parse(ByteArrayInputStream(xml.toByteArray(Charsets.UTF_8)))
     }
 }

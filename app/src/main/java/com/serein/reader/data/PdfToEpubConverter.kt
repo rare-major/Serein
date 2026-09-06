@@ -123,6 +123,7 @@ internal object PdfToEpubConverter {
             lineSeparator = "\n"
             paragraphEnd = "\n\n"
             sortByPosition = true
+            spacingTolerance = 2.0f
         }
         val raw = stripper.getText(document)
         budget.consume(raw.length)
@@ -207,19 +208,26 @@ internal object PdfToEpubConverter {
         </container>
     """.trimIndent()
 
-    private fun packageOpf(title: String, author: String, chapterCount: Int, hasCover: Boolean): String {
+    // trimIndent() strips the *smallest* leading-whitespace among all lines. A multi-line
+    // interpolated value (a joined list of items or paragraphs) contributes lines of its own,
+    // and if those happen to be less indented than the template, trimIndent under-strips the
+    // whole template — leaving stray whitespace before the XML declaration itself, which every
+    // strict XML parser (including our own) rejects outright. Trimming the static skeleton by
+    // itself first, then substituting multi-line content into a placeholder afterwards, keeps
+    // the two indentation schemes from ever interfering with each other.
+    internal fun packageOpf(title: String, author: String, chapterCount: Int, hasCover: Boolean): String {
         val modified = Instant.now().truncatedTo(ChronoUnit.SECONDS).toString()
         val coverMeta = if (hasCover) "<meta name=\"cover\" content=\"cover-image\"/>" else ""
         val coverItem = if (hasCover) {
             "<item id=\"cover-image\" href=\"cover.jpg\" media-type=\"image/jpeg\" properties=\"cover-image\"/>"
         } else ""
-        val chapterItems = (1..chapterCount).joinToString("\n    ") { index ->
+        val chapterItems = (1..chapterCount).joinToString("\n") { index ->
             "<item id=\"chapter$index\" href=\"chapter$index.xhtml\" media-type=\"application/xhtml+xml\"/>"
         }
-        val spineItems = (1..chapterCount).joinToString("\n    ") { index ->
+        val spineItems = (1..chapterCount).joinToString("\n") { index ->
             "<itemref idref=\"chapter$index\"/>"
         }
-        return """
+        val template = """
             <?xml version="1.0" encoding="UTF-8"?>
             <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id">
               <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -233,20 +241,23 @@ internal object PdfToEpubConverter {
               <manifest>
                 <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
                 $coverItem
-                $chapterItems
+                __CHAPTER_ITEMS__
               </manifest>
               <spine>
-                $spineItems
+                __SPINE_ITEMS__
               </spine>
             </package>
         """.trimIndent()
+        return template
+            .replace("__CHAPTER_ITEMS__", chapterItems)
+            .replace("__SPINE_ITEMS__", spineItems)
     }
 
-    private fun navXhtml(title: String, chapterTitles: List<String>): String {
+    internal fun navXhtml(title: String, chapterTitles: List<String>): String {
         val items = chapterTitles.mapIndexed { index, chapterTitle ->
             "<li><a href=\"chapter${index + 1}.xhtml\">${escapeXml(chapterTitle)}</a></li>"
-        }.joinToString("\n        ")
-        return """
+        }.joinToString("\n")
+        val template = """
             <?xml version="1.0" encoding="UTF-8"?>
             <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
               <head><title>${escapeXml(title)}</title></head>
@@ -254,26 +265,28 @@ internal object PdfToEpubConverter {
                 <nav epub:type="toc" id="toc">
                   <h1>Contents</h1>
                   <ol>
-                    $items
+                    __ITEMS__
                   </ol>
                 </nav>
               </body>
             </html>
         """.trimIndent()
+        return template.replace("__ITEMS__", items)
     }
 
-    private fun chapterXhtml(title: String, paragraphs: List<String>): String {
-        val body = paragraphs.joinToString("\n    ") { paragraph -> "<p>${escapeXml(paragraph)}</p>" }
-        return """
+    internal fun chapterXhtml(title: String, paragraphs: List<String>): String {
+        val body = paragraphs.joinToString("\n") { paragraph -> "<p>${escapeXml(paragraph)}</p>" }
+        val template = """
             <?xml version="1.0" encoding="UTF-8"?>
             <html xmlns="http://www.w3.org/1999/xhtml">
               <head><title>${escapeXml(title)}</title></head>
               <body>
                 <h1>${escapeXml(title)}</h1>
-                $body
+                __BODY__
               </body>
             </html>
         """.trimIndent()
+        return template.replace("__BODY__", body)
     }
 
     internal fun escapeXml(value: String): String = value
