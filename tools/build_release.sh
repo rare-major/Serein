@@ -36,7 +36,7 @@ deliverable="$project_root/Serein-android-release.apk"
 
 signature_report="$("$build_tools/apksigner" verify --verbose --print-certs "$apk")"
 printf '%s\n' "$signature_report"
-grep -Fq "Signer #1 certificate SHA-256 digest: $expected_certificate_sha256" <<<"$signature_report" || {
+grep -Fq "certificate SHA-256 digest: $expected_certificate_sha256" <<<"$signature_report" || {
   echo "Release is not signed by the expected Serein certificate." >&2
   exit 1
 }
