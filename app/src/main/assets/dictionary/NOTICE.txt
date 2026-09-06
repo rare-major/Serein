@@ -1,0 +1,5 @@
+Open English WordNet 2025
+Copyright Open English WordNet contributors.
+Source: https://en-word.net/
+Licensed under Creative Commons Attribution 4.0 International:
+https://creativecommons.org/licenses/by/4.0/
